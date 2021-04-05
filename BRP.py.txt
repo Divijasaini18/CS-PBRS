@@ -1,0 +1,104 @@
+import pandas as pandas
+import numpy as numpy
+from nltk.corpus import stopwords
+from sklearn.metrices.pairwise import linear_kernel
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import TfidVectorizer
+from nltk.tokenize import RegexpTokenizer
+import re
+import string
+import random
+import requests
+from io import BytesIO
+import matplotlib.pyplot as plt
+%matplotlib inline
+
+df=pd.read_csv("prog_book.csv")
+df.head()
+df.shape()
+
+df['Type'].value_counts().plot(x='Type',y='count',kind='bar',figsize=(10,5))
+df['word_count']=df2['Description'].apply(lambda x: len(str(x).split()))
+df['word_count'].plot(kind='hist',bins=50,figsize=(12,8),title='Word Count Distribution for book descriptions')
+
+blob=TextBlob(str(df['Description']))
+pos_df=pd.DataFrame(blob.tags,columns=['word','pos'])
+pos_df=pos_df.pos.value_counts()[:20]
+pos_df.plot(kind='bar',figsize=(10,8),title="Top 20 part of speech tagging for comments")
+
+tf=TfidVectorizer(ngram_range=(2,2),stop_words='english',lowercase=False)
+tfidf_matrix=tf.fit_transform(df['Description'])
+total_words=tfidf_matrix.sum(axis=0)
+freq=[(word,total_words[0,idx])for word, idx in tf.vocabulary_.items()]
+freq=sorted(freq,key=lambda x:x[1],reverse=True)
+bigram=pd.DataFrame(freq)
+bigram.rename(columns={0:'bigram',1:'count'}, inplace=True)
+bigram=bigram.head(20)
+bigram.plot(x='bigram',y='count',kind='bar',title="Bigram distribution", figsize=(15,7))
+
+tf=TfidfVectorizer(ngram_range=(3,3),stop_words='english',lowercase=False)
+total_words= tfidf_matrix.sum(axis=0)
+freq=[(word,total_words[0,idx])for word , idx in tf.vocabulary_.items()]
+freq=sorted(freq,key=lambda x:x[1],reverse=True)
+trigram=pd.DataFrame(freq)
+trigram.rename(columns={0:'trigram',1:'count'},inplace=True)
+trigram=trigram.head(20)
+trigram.plot(x='trigram',y='count', kind='bar',title="Trigram distribution",figsize=(15,7))
+
+def _removeNonAscii(s):
+    return "".join(i for i in s if ord(i)<128)
+
+def make_lower_case(text):
+    return text.lower()
+
+def remove_stop_words(text):
+    text=text.split()
+    stops= set(stopwords.words("english"))
+    text=[w for w in text if not w in stops]
+    text= " ".join(text)
+    return text
+
+def remove_punctuation(text):
+    tokenizer=RegexpTokenizer(r'\w+')
+    text=tokenizer.tokenize(text)
+    text=" ".join(text)
+    return text
+
+def remove_html(text):
+    html_pattern=re.compile('<.*?>')
+    return html_pattern.sub(r'',text)
+
+df['cleaned_desc']=df['Description'].apply(_removeNonAscii)
+df['cleaned_desc']=df.cleaned_desc.apply(func=make_lower_case)
+df['cleaned_desc']=df.cleaned_desc.apply(func=remove_stop_words)
+df['cleaned_desc']=df.cleaned_desc.apply(func=remove_punctuation)
+df['cleaned_desc']=df.cleaned_desc.apply(func=remove_html)
+
+def recommend(title, genre):
+    data=df2.loc[df2['Type']==genre]
+    data.reset_index(level=0,inplace=True)
+    indices=pd.Series(data.idx, index=data['Book_Title'])
+    tf=TfidfVectorizer(analyzer='word',ngram_range=(2,2), min_df=1, stop_words='english')
+    tfidf_matrix=tf.fit_fit_transform(data['Book_Title'])
+    sg=cosine_similarity(tfidf_matrix, tfidf_matrix)
+    idx= indices[title]
+    sig=list(enumerate(sg[idx]))
+    sig=sorted(sig,key=lambda x:x[1], reverse=True)
+    sig=sig[1:6]
+    book_indices=[i[0] for i in sig]
+    rec= data['Book_Title','Number_Of_Pages','Price'].iloc[book_indices]
+
+def recommend(title, genre):
+    global rec
+    data=df2.loc[df2['Type']==genre]
+    data.reset_index(level=0,inplace=True)
+    indices=pd.Series(data.idx, index=data['Book_Title'])
+    tf=TfidfVectorizer(analyzer='word',ngram_range=(2,2), min_df=1, stop_words='english')
+    tfidf_matrix=tf.fit_transform(data['cleaned_desc'])
+    sg=cosine_similarity(tfidf_matrix, tfidf_matrix)
+    idx= indices[title]
+    sig=list(enumerate(sg[idx]))
+    sig=sorted(sig,key=lambda x:x[1], reverse=True)
+    sig=sig[1:6]
+    book_indices=[i[0] for i in sig]
+    rec= data['Book_Title','Number_Of_Pages','Price'].iloc[book_indices]
